@@ -1,0 +1,311 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Monster Hunter 3D</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#080d13;font-family:Arial;color:white;touch-action:none}
+canvas{display:block}
+#hud{position:absolute;top:12px;left:12px;right:12px;pointer-events:none}
+.panel{background:#101923dd;border:1px solid #60708066;border-radius:12px;padding:10px;margin-bottom:7px;width:max-content;min-width:180px}
+#health{height:9px;background:#444;border-radius:10px;overflow:hidden;margin-top:5px}
+#healthFill{height:100%;background:#31e36d;width:100%}
+#message{position:absolute;top:36%;width:100%;text-align:center;font-size:27px;font-weight:bold;text-shadow:0 2px 8px black;pointer-events:none}
+#controls{position:absolute;bottom:20px;left:15px;right:15px;display:flex;justify-content:space-between;align-items:end}
+.pad{display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:4px}
+button{border:1px solid #ffffff66;background:#24394dcc;color:white;border-radius:13px;font-size:20px;font-weight:bold;touch-action:none}
+.pad button{width:48px;height:48px}
+#up{grid-column:2;grid-row:1}
+#left{grid-column:1;grid-row:2}
+#down{grid-column:2;grid-row:2}
+#right{grid-column:3;grid-row:2}
+.actions{display:flex;gap:10px;align-items:end}
+.actions button{width:67px;height:67px;border-radius:50%;background:#a12c24dd}
+#attack{background:#b52b22;font-size:16px}
+#next{position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);padding:15px 25px;display:none;background:#168d48}
+#hint{position:absolute;bottom:5px;width:100%;text-align:center;color:#ddd;font-size:11px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="hud">
+ <div class="panel">
+  <b>⚔️ MONSTER HUNTER 3D</b><br>
+  <span id="wave">Màn 1 / 30</span> · <span id="kills">0 quái</span><br>
+  <div id="health"></div><div id="hpText">Máu: 100 / 100</div>
+ </div>
+ <div class="panel" id="enemyInfo">Zombie đang xuất hiện...</div>
+</div>
+<div id="message">HÃY SẴN SÀNG!</div>
+<button id="next">MÀN TIẾP THEO ➜</button>
+<div id="controls">
+ <div class="pad">
+  <button id="up">▲</button>
+  <button id="left">◀</button>
+  <button id="down">▼</button>
+  <button id="right">▶</button>
+ </div>
+ <div class="actions">
+  <button id="attack">⚔️<br>CHÉM</button>
+ </div>
+</div>
+<div id="hint">Dùng các nút để di chuyển và chém zombie</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x101c20);
+scene.fog=new THREE.Fog(0x101c20,18,65);
+
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,100);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xc4e1ff,0x263020,2));
+const sun=new THREE.DirectionalLight(0xffffff,2.2);
+sun.position.set(-8,15,8);
+sun.castShadow=true;
+scene.add(sun);
+
+const ground=new THREE.Mesh(
+ new THREE.PlaneGeometry(100,100),
+ new THREE.MeshStandardMaterial({color:0x34443a,roughness:1})
+);
+ground.rotation.x=-Math.PI/2;
+ground.receiveShadow=true;
+scene.add(ground);
+
+const grid=new THREE.GridHelper(100,50,0x526354,0x435448);
+grid.position.y=.015;
+scene.add(grid);
+
+const mat=(color,roughness=.8)=>new THREE.MeshStandardMaterial({color,roughness});
+function cube(parent,w,h,d,material,x,y,z){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);
+ m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
+}
+function ball(parent,r,material,x,y,z){
+ const m=new THREE.Mesh(new THREE.SphereGeometry(r,16,12),material);
+ m.position.set(x,y,z);m.castShadow=true;parent.add(m);return m;
+}
+
+// Nhân vật
+const player=new THREE.Group();scene.add(player);
+const skin=mat(0xe8b58b),armor=mat(0x243a58),dark=mat(0x18202d);
+cube(player,.65,.9,.4,armor,0,1,0);
+ball(player,.32,skin,0,1.68,0);
+cube(player,.22,.65,.25,armor,-.24,.42,0);
+cube(player,.22,.65,.25,armor,.24,.42,0);
+ball(player,.045,mat(0xffffff),-.12,1.73,.28);
+ball(player,.045,mat(0xffffff),.12,1.73,.28);
+
+// Kiếm năng lượng
+const sword=new THREE.Group();
+sword.position.set(.47,1.05,0);
+player.add(sword);
+cube(sword,.13,.95,.09,mat(0x45eaff,.3),0,.58,0);
+cube(sword,.1,.17,.14,mat(0xffd45c),0,.08,0);
+cube(sword,.1,.24,.11,dark,0,-.1,0);
+const glow=new THREE.PointLight(0x28cfff,2,4);
+glow.position.set(0,.6,.2);sword.add(glow);
+
+// Cây và đá trang trí
+for(let i=0;i<45;i++){
+ let x=(Math.random()-.5)*65,z=(Math.random()-.5)*65;
+ if(Math.hypot(x,z)<8)continue;
+ const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.12,.2,1.5,7),mat(0x493321));
+ trunk.position.set(x,.75,z);scene.add(trunk);
+ const leaves=new THREE.Mesh(new THREE.ConeGeometry(1,2.6,7),mat(0x183d2a));
+ leaves.position.set(x,2.5,z);scene.add(leaves);
+}
+
+// Âm thanh tạo trực tiếp
+let audio;
+function sound(freq=180,duration=.12,type='sawtooth'){
+ try{
+  audio ||= new (window.AudioContext||window.webkitAudioContext)();
+  if(audio.state==='suspended')audio.resume();
+  const osc=audio.createOscillator(),gain=audio.createGain();
+  osc.type=type;osc.frequency.setValueAtTime(freq,audio.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(30,freq*.35),audio.currentTime+duration);
+  gain.gain.setValueAtTime(.15,audio.currentTime);
+  gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);
+  osc.connect(gain);gain.connect(audio.destination);
+  osc.start();osc.stop(audio.currentTime+duration);
+ }catch(e){}
+}
+
+let wave=1,kills=0,hp=100,attackTime=0,attackCooldown=0;
+let zombies=[],finished=false,gameOver=false;
+const clock=new THREE.Clock();
+const keys={};
+const hpFill=document.getElementById('healthFill');
+const message=document.getElementById('message');
+const next=document.getElementById('next');
+
+function updateHUD(){
+ document.getElementById('wave').textContent=`Màn ${wave} / 30`;
+ document.getElementById('kills').textContent=`${kills} quái`;
+ hpFill.style.width=hp+'%';
+ document.getElementById('hpText').textContent=`Máu: ${Math.ceil(hp)} / 100`;
+ document.getElementById('enemyInfo').textContent=`Zombie còn lại: ${zombies.length}`;
+}
+
+function makeZombie(boss=false){
+ const z=new THREE.Group();
+ const tier=Math.floor((wave-1)/5);
+ const colors=[0x718c65,0x7b8c47,0x536c6b,0x66536e,0x9c493d,0x4d233b];
+ const body=mat(boss?0x70202b:colors[tier]);
+ cube(z,boss?1.25:.7,boss?1.8:1.15,boss?1: .55,body,0,boss?1.25:.9,0);
+ ball(z,boss?.48:.32,body,0,boss?2.4:1.65,0);
+ for(let s of [-1,1]){
+  ball(z,.06,mat(0xff2929),s*.13,boss?2.47:1.7,.28);
+  cube(z,.2,boss?.9:.7,.2,body,s*(boss?.75:.48),.8,0);
+ }
+ z.position.set((Math.random()-.5)*15,0,-10-Math.random()*12);
+ scene.add(z);
+ zombies.push({mesh:z,hp:boss?100+wave*25:25+wave*4,boss,hit:0,damage:boss?18:8});
+}
+
+function spawnWave(){
+ zombies.forEach(z=>scene.remove(z.mesh));zombies=[];
+ finished=false;gameOver=false;hp=100;
+ const boss=wave%5===0;
+ const count=3+Math.min(wave,8);
+ for(let i=0;i<count;i++)makeZombie(false);
+ if(boss)makeZombie(true);
+ message.textContent=boss?'⚠️ BOSS XUẤT HIỆN!':'MÀN '+wave;
+ message.style.display='block';
+ setTimeout(()=>message.style.display='none',1800);
+ next.style.display='none';updateHUD();
+}
+spawnWave();
+
+function attack(){
+ if(gameOver||finished||attackCooldown>0)return;
+ attackTime=.32;attackCooldown=.48;
+ sound(250,.18);
+ for(const z of zombies){
+  if(z.mesh.position.distanceTo(player.position)<3.5){
+   z.hp-=15+wave*3;
+   z.hit=.15;
+   sound(110,.08,'square');
+  }
+ }
+ const dead=zombies.filter(z=>z.hp<=0);
+ dead.forEach(z=>{
+  scene.remove(z.mesh);
+  kills++;
+ });
+ zombies=zombies.filter(z=>z.hp>0);
+ updateHUD();
+ if(zombies.length===0)completeWave();
+}
+function completeWave(){
+ if(finished)return;
+ finished=true;
+ if(wave===30){
+  message.textContent='🏆 BẠN ĐÃ CHINH PHỤC THẾ GIỚI!';
+  next.textContent='CHƠI LẠI';
+ }else{
+  message.textContent='🎉 HOÀN THÀNH MÀN '+wave;
+  next.textContent='MÀN TIẾP THEO ➜';
+ }
+ message.style.display='block';next.style.display='block';
+ sound(500,.5,'sine');
+}
+next.onclick=()=>{
+ if(wave===30)wave=1;else wave++;
+ spawnWave();
+};
+
+// Nút cảm ứng
+function hold(id,key){
+ const b=document.getElementById(id);
+ b.addEventListener('pointerdown',e=>{e.preventDefault();keys[key]=true;b.setPointerCapture(e.pointerId)});
+ b.addEventListener('pointerup',()=>keys[key]=false);
+ b.addEventListener('pointercancel',()=>keys[key]=false);
+ b.addEventListener('lostpointercapture',()=>keys[key]=false);
+}
+hold('up','up');hold('down','down');hold('left','left');hold('right','right');
+document.getElementById('attack').addEventListener('pointerdown',e=>{e.preventDefault();attack()});
+addEventListener('keydown',e=>{
+ const k=e.key.toLowerCase();
+ if(k==='w'||k==='arrowup')keys.up=true;
+ if(k==='s'||k==='arrowdown')keys.down=true;
+ if(k==='a'||k==='arrowleft')keys.left=true;
+ if(k==='d'||k==='arrowright')keys.right=true;
+ if(k===' ')attack();
+});
+addEventListener('keyup',e=>{
+ const k=e.key.toLowerCase();
+ if(k==='w'||k==='arrowup')keys.up=false;
+ if(k==='s'||k==='arrowdown')keys.down=false;
+ if(k==='a'||k==='arrowleft')keys.left=false;
+ if(k==='d'||k==='arrowright')keys.right=false;
+});
+
+function animate(){
+ requestAnimationFrame(animate);
+ const dt=Math.min(clock.getDelta(),.04);
+ if(!gameOver){
+  const move=new THREE.Vector3(
+   (keys.right?1:0)-(keys.left?1:0),0,
+   (keys.down?1:0)-(keys.up?1:0)
+  );
+  if(move.length()>0){
+   move.normalize();player.position.addScaledVector(move,dt*6);
+   player.rotation.y=Math.atan2(move.x,move.z);
+  }
+  player.position.x=THREE.MathUtils.clamp(player.position.x,-40,40);
+  player.position.z=THREE.MathUtils.clamp(player.position.z,-40,40);
+  attackCooldown=Math.max(0,attackCooldown-dt);
+  attackTime=Math.max(0,attackTime-dt);
+  sword.rotation.z=attackTime>0?Math.sin(attackTime/.32*Math.PI)*-1.8:0;
+
+  for(const z of zombies){
+   const m=z.mesh;
+   const dir=new THREE.Vector3().subVectors(player.position,m.position);
+   const dist=dir.length();
+   if(dist>1.6){
+    dir.normalize();m.position.addScaledVector(dir,dt*(z.boss?1.5:2.1+wave*.025));
+    m.rotation.y=Math.atan2(dir.x,dir.z);
+   }else if(Math.random()<dt*.8){
+    hp-=z.damage*dt;
+    updateHUD();
+   }
+   if(z.hit>0){z.hit-=dt;m.position.y=.12;}
+   else m.position.y=0;
+  }
+  if(hp<=0){
+   hp=0;gameOver=true;
+   message.textContent='💀 BẠN ĐÃ GỤC NGÃ';
+   message.style.display='block';
+   next.textContent='THỬ LẠI';
+   next.style.display='block';
+   next.onclick=()=>{hp=100;spawnWave();next.onclick=()=>{if(wave===30)wave=1;else wave++;spawnWave()};};
+   updateHUD();
+  }
+ }
+ const target=new THREE.Vector3(player.position.x,1,player.position.z);
+ const behind=new THREE.Vector3(0,5,9).applyAxisAngle(new THREE.Vector3(0,1,0),player.rotation.y);
+ camera.position.lerp(target.clone().add(behind),.09);
+ camera.lookAt(target);
+ renderer.render(scene,camera);
+}
+animate();
+
+addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
+
